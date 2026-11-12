@@ -1,0 +1,25 @@
+{
+  "name": "multilingual-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multilingual (EN/ES/FR/PT/DE) chatbot with layered prompt-injection defences",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/*.test.ts\"",
+    "smoke": "node scripts/smoke.ts",
+    "redteam": "node scripts/redteam.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@google/genai": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
