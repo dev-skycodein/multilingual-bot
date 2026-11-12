@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Multilingual (EN/ES/FR/PT/DE) chatbot with layered prompt-injection defences",
+  "description": "Multilingual (EN/ES/FR/PT/DE/IT) chatbot with layered prompt-injection defences",
   "engines": {
     "node": ">=24"
   },

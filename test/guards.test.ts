@@ -46,7 +46,7 @@ test("output guard: blocks long verbatim copies of the system prompt", () => {
   assert.equal(r.ok, false);
 });
 
-test("output guard: allows normal answers in all five languages, rejects empty", () => {
+test("output guard: allows normal answers in all six languages, rejects empty", () => {
   const prompt = buildSystemPrompt("OpBritops", CANARY);
   const guard = createOutputGuard(prompt, CANARY);
   for (const ok of [
@@ -55,6 +55,7 @@ test("output guard: allows normal answers in all five languages, rejects empty",
     "Bonjour ! Je peux vous aider avec OpBritops.",
     "Olá! Posso ajudar com perguntas sobre o OpBritops.",
     "Hallo! Ich kann Ihnen bei Fragen zu OpBritops helfen.",
+    "Ciao! Posso aiutarti con le domande su OpBritops.",
   ]) {
     assert.equal(guard.check(ok).ok, true, ok);
   }

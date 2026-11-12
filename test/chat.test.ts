@@ -112,7 +112,7 @@ test("daily cap: 503 once the cap is reached", async () => {
   assert.equal((await send(deps, "b")).status, 503);
 });
 
-test("canned messages contain all five languages", () => {
+test("canned messages contain all six languages", () => {
   const m = messages("OpBritops");
-  for (const text of Object.values(m)) assert.equal(text.split("\n").length, 5);
+  for (const text of Object.values(m)) assert.equal(text.split("\n").length, 6);
 });

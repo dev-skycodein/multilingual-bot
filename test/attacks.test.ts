@@ -5,7 +5,7 @@ import { buildAttacks } from "../scripts/attacks.ts";
 // Encoded / obfuscated attacks exist in English only on purpose.
 const ENGLISH_ONLY = new Set(["encoded", "obfuscated"]);
 
-test("red-team corpus: ids are unique and every translated category covers all five languages", () => {
+test("red-team corpus: ids are unique and every translated category covers all six languages", () => {
   const attacks = buildAttacks();
   assert.equal(new Set(attacks.map((a) => a.id)).size, attacks.length);
 
@@ -16,11 +16,11 @@ test("red-team corpus: ids are unique and every translated category covers all f
   }
   assert.ok(langsByCategory.size >= 8, "at least 8 translated attack categories");
   for (const [category, langs] of langsByCategory) {
-    assert.deepEqual([...langs].sort(), ["de", "en", "es", "fr", "pt"], category);
+    assert.deepEqual([...langs].sort(), ["de", "en", "es", "fr", "it", "pt"], category);
   }
 });
 
-test("red-team corpus: includes false-positive checks in all five languages", () => {
+test("red-team corpus: includes false-positive checks in all six languages", () => {
   const greetings = buildAttacks().filter((a) => a.category === "legit");
-  assert.deepEqual(greetings.map((a) => a.lang).sort(), ["de", "en", "es", "fr", "pt"]);
+  assert.deepEqual(greetings.map((a) => a.lang).sort(), ["de", "en", "es", "fr", "it", "pt"]);
 });
