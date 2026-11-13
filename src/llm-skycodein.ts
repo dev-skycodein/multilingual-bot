@@ -5,8 +5,8 @@
 //    counts as a message, so a long history could push it out. fitToBudget() prevents that.
 //  - our system message is applied AFTER SkyCodein's own instructions and cannot replace them
 //  - 30 requests per minute per key, one reply at a time, 8 waiting (the chat makes 2 calls per message)
-import { CLASSIFIER_SYSTEM, EmptyReplyError, parseVerdict, trimTruncated, wrapForClassifier } from "./llm.ts";
-import type { LlmClient } from "./llm.ts";
+import { CLASSIFIER_LANGUAGES, CLASSIFIER_SYSTEM, EmptyReplyError, classifierFields, parseClassification, trimTruncated, wrapForClassifier } from "./llm.ts";
+import type { Classification, LlmClient } from "./llm.ts";
 import type { Turn } from "./sessions.ts";
 
 export interface ApiMessage {
@@ -19,6 +19,8 @@ export interface SkycodeinOptions {
   classifierModel: string;
   maxOutputTokens: number;
   baseUrl: string;
+  /** Named in the classifier's scope check. */
+  productName?: string;
   /** Defaults to SKYCODEIN_API_KEY. */
   apiKey?: string;
   /** Characters of conversation sent per request (the API's own limit is 8000; we keep a margin). */
@@ -29,7 +31,6 @@ export interface SkycodeinOptions {
   fetch?: typeof fetch;
 }
 
-const JSON_HINT = `\n\nReturn ONLY a JSON object: {"verdict":"SAFE"} or {"verdict":"UNSAFE"}.`;
 
 /** Error from the API. `message` never contains the key. */
 export class SkycodeinError extends Error {
@@ -70,6 +71,7 @@ export function createSkycodeinLlm(opts: SkycodeinOptions): LlmClient {
   const maxChars = opts.maxChars ?? 7000;
   const maxMessages = opts.maxMessages ?? 18;
   const timeoutMs = opts.timeoutMs ?? 45_000;
+  const fields = classifierFields(opts.productName ?? "the product");
 
   const scrub = (text: string, key: string): string => {
     let out = text;
@@ -119,31 +121,40 @@ export function createSkycodeinLlm(opts: SkycodeinOptions): LlmClient {
   }
 
   return {
-    async classify(text, context) {
+    async classifyWithLanguage(text, context): Promise<Classification> {
       const { text: out } = await call({
         model: opts.classifierModel,
-        max_tokens: 32,
+        max_tokens: 64,
         temperature: 0,
         // Live finding: as plain text the API's own persona answers the user instead of the filter prompt.
-        // A JSON schema forces {"verdict":"SAFE"|"UNSAFE"} every time.
+        // A JSON schema forces {"verdict":"SAFE"|"UNSAFE"} every time. The language is optional on purpose:
+        // a missing or odd language must never turn a SAFE verdict into an error.
         response_format: {
           type: "json_schema",
           json_schema: {
             name: "verdict",
             schema: {
               type: "object",
-              properties: { verdict: { type: "string", enum: ["SAFE", "UNSAFE"] } },
+              properties: {
+                verdict: { type: "string", enum: ["SAFE", "UNSAFE"] },
+                language: { type: "string", enum: [...CLASSIFIER_LANGUAGES] },
+                scope: { type: "string", enum: ["on_topic", "off_topic"] },
+              },
               required: ["verdict"],
               additionalProperties: false,
             },
           },
         },
         messages: [
-          { role: "system", content: CLASSIFIER_SYSTEM + JSON_HINT },
+          { role: "system", content: CLASSIFIER_SYSTEM + fields },
           { role: "user", content: wrapForClassifier(text, context) },
         ],
       });
-      return parseVerdict(out);
+      return parseClassification(out);
+    },
+
+    async classify(text, context) {
+      return (await this.classifyWithLanguage!(text, context)).verdict;
     },
 
     async reply(system, history) {

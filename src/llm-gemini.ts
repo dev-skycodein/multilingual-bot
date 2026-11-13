@@ -1,7 +1,7 @@
 import { GoogleGenAI, FinishReason, ThinkingLevel, Type } from "@google/genai";
 import type { GenerateContentParameters, GenerateContentResponse } from "@google/genai";
-import { CLASSIFIER_SYSTEM, EmptyReplyError, parseVerdict, trimTruncated, wrapForClassifier } from "./llm.ts";
-import type { LlmClient } from "./llm.ts";
+import { CLASSIFIER_LANGUAGES, CLASSIFIER_SYSTEM, EmptyReplyError, classifierFields, parseClassification, trimTruncated, wrapForClassifier } from "./llm.ts";
+import type { Classification, LlmClient } from "./llm.ts";
 import type { ThinkingLevelName } from "./config.ts";
 
 /** The one SDK method we use. Tests pass a fake with this shape. */
@@ -14,6 +14,8 @@ export interface GeminiOptions {
   classifierModel: string;
   maxOutputTokens: number;
   thinkingLevel?: ThinkingLevelName | undefined;
+  /** Named in the classifier's scope check. */
+  productName?: string | undefined;
   /** Defaults to a real client using GEMINI_API_KEY. */
   client?: GeminiLike;
 }
@@ -25,6 +27,7 @@ const LEVELS: Record<ThinkingLevelName, ThinkingLevel> = {
   high: ThinkingLevel.HIGH,
 };
 
+
 export function createGeminiLlm(opts: GeminiOptions): LlmClient {
   const ai: GeminiLike =
     opts.client ??
@@ -34,31 +37,40 @@ export function createGeminiLlm(opts: GeminiOptions): LlmClient {
       httpOptions: { timeout: 30_000, retryOptions: { attempts: 2 } },
     });
 
+  const fields = classifierFields(opts.productName ?? "the product");
   const thinking = opts.thinkingLevel ? { thinkingConfig: { thinkingLevel: LEVELS[opts.thinkingLevel] } } : {};
 
   return {
-    async classify(text, context) {
+    async classifyWithLanguage(text, context): Promise<Classification> {
       const res = await ai.models.generateContent({
         model: opts.classifierModel,
         contents: [{ role: "user", parts: [{ text: wrapForClassifier(text, context) }] }],
         config: {
-          systemInstruction: CLASSIFIER_SYSTEM,
+          systemInstruction: CLASSIFIER_SYSTEM + fields,
           // Thinking tokens count against maxOutputTokens, so leave room for them.
           maxOutputTokens: 1024,
-          // Structured output: the answer is {"verdict":"SAFE"|"UNSAFE"}, so a stray full stop or
-          // markdown cannot turn a harmless message into a block.
+          // Structured output: the answer is {"verdict":"SAFE"|"UNSAFE","language":...}, so a stray full stop or
+          // markdown cannot turn a harmless message into a block. The language is optional.
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
-            properties: { verdict: { type: Type.STRING, enum: ["SAFE", "UNSAFE"] } },
+            properties: {
+              verdict: { type: Type.STRING, enum: ["SAFE", "UNSAFE"] },
+              language: { type: Type.STRING, enum: [...CLASSIFIER_LANGUAGES] },
+              scope: { type: Type.STRING, enum: ["on_topic", "off_topic"] },
+            },
             required: ["verdict"],
           },
           ...thinking,
         },
       });
       // A prompt that Gemini itself blocked is treated as an attack.
-      if (res.promptFeedback?.blockReason) return "UNSAFE";
-      return parseVerdict(res.text);
+      if (res.promptFeedback?.blockReason) return { verdict: "UNSAFE", language: undefined, scope: undefined };
+      return parseClassification(res.text);
+    },
+
+    async classify(text, context) {
+      return (await this.classifyWithLanguage!(text, context)).verdict;
     },
 
     async reply(system, history) {

@@ -4,7 +4,7 @@ import { SessionStore } from "../src/sessions.ts";
 import { createOutputGuard } from "../src/guards/output.ts";
 import { SlidingWindowLimiter, DailyCap, KeyedDailyCap } from "../src/guards/ratelimit.ts";
 import type { ChatDeps } from "../src/chat.ts";
-import type { LlmClient, ReplyResult, Verdict } from "../src/llm.ts";
+import type { LlmClient, ModelLanguage, ReplyResult, Scope, Verdict } from "../src/llm.ts";
 import type { Turn } from "../src/sessions.ts";
 
 export const CANARY = "CANARY-test-0000-1111-2222";
@@ -14,6 +14,10 @@ export interface FakeLlm extends LlmClient {
   classifyContexts: (string[] | undefined)[];
   replyCalls: { system: string; history: Turn[] }[];
   verdict: Verdict | Error;
+  /** The language the fake classifier reports for every message (undefined = it does not say). */
+  language: ModelLanguage | undefined;
+  /** The scope the fake classifier reports for every message (undefined = it does not say). */
+  scope: Scope | undefined;
   next: ReplyResult | Error;
   /** Replies handed out first, one per call; when empty `next` is used. */
   queue: ReplyResult[];
@@ -25,6 +29,8 @@ export function fakeLlm(): FakeLlm {
     classifyContexts: [],
     replyCalls: [],
     verdict: "SAFE",
+    language: undefined,
+    scope: undefined,
     next: { kind: "text", text: "Hello! I can help with OpBritops." },
     queue: [],
     async classify(text, context) {
@@ -32,6 +38,9 @@ export function fakeLlm(): FakeLlm {
       llm.classifyContexts.push(context);
       if (llm.verdict instanceof Error) throw llm.verdict;
       return llm.verdict;
+    },
+    async classifyWithLanguage(text, context) {
+      return { verdict: await llm.classify(text, context), language: llm.language, scope: llm.scope };
     },
     async reply(system, history) {
       llm.replyCalls.push({ system, history });

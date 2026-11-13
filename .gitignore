@@ -13,3 +13,7 @@ redteam-*.jsonl
 
 # local API docs (internal address, may sit next to keys): never commit
 API.md
+
+# browser test output
+.playwright-mcp/
+bot-*.png

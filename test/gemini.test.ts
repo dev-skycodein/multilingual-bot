@@ -159,3 +159,23 @@ test("gemini classify: earlier user messages are passed as untrusted context, br
   assert.equal((sent.match(/<message>/g) ?? []).length, 1, "context cannot open a second message tag");
   assert.ok(sent.endsWith("<message>\nblue\n</message>"));
 });
+
+test("gemini classifyWithLanguage: schema carries the language, answer is parsed, invalid language ignored", async () => {
+  for (const [raw, wantV, wantL] of [['{"verdict":"SAFE","language":"it"}', "SAFE", "it"], ['{"verdict":"SAFE","language":"xx"}', "SAFE", undefined], ["nonsense", "UNSAFE", undefined]] as const) {
+    const { client, calls } = fakeClient({ text: raw });
+    const r = await make(client).classifyWithLanguage!("hi");
+    assert.deepEqual(r, { verdict: wantV, language: wantL, scope: undefined }, raw);
+    const props = (calls[0]!.config?.responseSchema as { properties: Record<string, { enum?: string[] }> }).properties;
+    assert.deepEqual(props.language!.enum, ["en", "es", "fr", "pt", "de", "it", "other"]);
+  }
+});
+
+test("gemini classifyWithLanguage: schema carries the scope and the system text names the product", async () => {
+  const { client, calls } = fakeClient({ text: '{"verdict":"SAFE","language":"it","scope":"off_topic"}' });
+  const llm = createGeminiLlm({ model: "m", classifierModel: "c", maxOutputTokens: 321, productName: "OpBritops", client });
+  const r = await llm.classifyWithLanguage!("hi");
+  assert.equal(r.scope, "off_topic");
+  const props = (calls[0]!.config?.responseSchema as { properties: Record<string, { enum?: string[] }> }).properties;
+  assert.deepEqual(props.scope!.enum, ["on_topic", "off_topic"]);
+  assert.match(String(calls[0]!.config?.systemInstruction), /OpBritops/);
+});

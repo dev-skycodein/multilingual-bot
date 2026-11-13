@@ -11,6 +11,7 @@ export function createLlm(config: Config): LlmClient {
       classifierModel: config.classifierModel,
       maxOutputTokens: config.maxOutputTokens,
       baseUrl: config.skycodeinBaseUrl,
+      productName: config.productName,
     });
   }
   if (config.provider === "gemini") {
@@ -19,6 +20,7 @@ export function createLlm(config: Config): LlmClient {
       classifierModel: config.classifierModel,
       maxOutputTokens: config.maxOutputTokens,
       thinkingLevel: config.thinkingLevel,
+      productName: config.productName,
     });
   }
   return createAnthropicLlm({

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { handleChat, messages, messageFor } from "../src/chat.ts";
 import { buildSystemPrompt, languageHint } from "../src/prompt.ts";
+import { parseClassification } from "../src/llm.ts";
 import { KeyedDailyCap } from "../src/guards/ratelimit.ts";
 import { SessionStore } from "../src/sessions.ts";
 import { loadConfig } from "../src/config.ts";
@@ -166,4 +167,18 @@ test("config: new limits have safe defaults and are validated", () => {
   assert.throws(() => loadConfig({ TRUST_PROXY_HOPS: "9" }), /Invalid TRUST_PROXY_HOPS/);
   assert.deepEqual(loadConfig({ HOST: "0.0.0.0" }).allowedHosts, [], "no host check unless configured when public");
   assert.deepEqual(loadConfig({ HOST: "0.0.0.0", ALLOWED_HOSTS: "Bot.Example.com, other.example" }).allowedHosts, ["bot.example.com", "other.example"]);
+});
+
+test("parseClassification: verdict fails closed, language only when valid", () => {
+  assert.deepEqual(parseClassification('{"verdict":"SAFE","language":"es"}'), { verdict: "SAFE", language: "es", scope: undefined });
+  assert.deepEqual(parseClassification('{"verdict":"SAFE","language":"zz"}'), { verdict: "SAFE", language: undefined, scope: undefined });
+  assert.deepEqual(parseClassification("SAFE."), { verdict: "SAFE", language: undefined, scope: undefined });
+  assert.deepEqual(parseClassification(undefined), { verdict: "UNSAFE", language: undefined, scope: undefined });
+  assert.deepEqual(parseClassification('{"verdict":"unsafe","language":"it"}'), { verdict: "UNSAFE", language: "it", scope: undefined });
+});
+
+test("parseClassification: scope is kept only when it is on_topic or off_topic", () => {
+  assert.deepEqual(parseClassification('{"verdict":"SAFE","language":"it","scope":"off_topic"}'), { verdict: "SAFE", language: "it", scope: "off_topic" });
+  assert.deepEqual(parseClassification('{"verdict":"SAFE","scope":"on_topic"}'), { verdict: "SAFE", language: undefined, scope: "on_topic" });
+  assert.deepEqual(parseClassification('{"verdict":"SAFE","scope":"maybe"}'), { verdict: "SAFE", language: undefined, scope: undefined });
 });
