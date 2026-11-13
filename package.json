@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test \"test/*.test.ts\"",
     "smoke": "node scripts/smoke.ts",
-    "redteam": "node scripts/redteam.ts"
+    "redteam": "node scripts/redteam.ts",
+    "redteam:hard": "node scripts/redteam-hard.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

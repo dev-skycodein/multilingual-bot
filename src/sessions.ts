@@ -12,6 +12,7 @@ interface Session {
 
 const ID_FORMAT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+// Eviction when the store is full is least-recently-used.
 // Conversation history lives on the server only. The client sends just a
 // session id and one message, so it can never inject fake "assistant" or
 // "system" turns into the history.
@@ -36,6 +37,7 @@ export class SessionStore {
       const existing = this.sessions.get(requestedId);
       if (existing) {
         existing.lastSeen = this.now();
+        this.touch(requestedId, existing);
         return requestedId;
       }
     }
@@ -50,6 +52,12 @@ export class SessionStore {
     return id;
   }
 
+  /** The last `n` messages the USER sent in this session (never assistant text). */
+  userMessages(id: string, n: number): string[] {
+    const h = this.sessions.get(id)?.history ?? [];
+    return h.filter((t) => t.role === "user").slice(-n).map((t) => t.content);
+  }
+
   history(id: string): Turn[] {
     return [...(this.sessions.get(id)?.history ?? [])];
   }
@@ -62,6 +70,13 @@ export class SessionStore {
     if (s.history.length > this.maxMessages) s.history = s.history.slice(-this.maxMessages);
     while (s.history[0] && s.history[0].role !== "user") s.history.shift();
     s.lastSeen = this.now();
+    this.touch(id, s);
+  }
+
+  /** Map keeps insertion order, so re-inserting makes this session the most recently used one. */
+  private touch(id: string, s: Session): void {
+    this.sessions.delete(id);
+    this.sessions.set(id, s);
   }
 
   private expire(): void {

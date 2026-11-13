@@ -4,11 +4,13 @@ const log = document.getElementById("log");
 const form = document.getElementById("form");
 const input = document.getElementById("input");
 const send = document.getElementById("send");
+input.dir = "auto";
 let sessionId = null;
 
 function add(role, text) {
   const div = document.createElement("div");
   div.className = "msg " + role;
+  div.dir = "auto"; // right-to-left text (Arabic, Urdu...) lays out correctly
   div.textContent = text;
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;

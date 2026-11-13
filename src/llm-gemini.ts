@@ -1,6 +1,6 @@
-import { GoogleGenAI, FinishReason, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, FinishReason, ThinkingLevel, Type } from "@google/genai";
 import type { GenerateContentParameters, GenerateContentResponse } from "@google/genai";
-import { CLASSIFIER_SYSTEM, EmptyReplyError, wrapForClassifier } from "./llm.ts";
+import { CLASSIFIER_SYSTEM, EmptyReplyError, parseVerdict, wrapForClassifier } from "./llm.ts";
 import type { LlmClient } from "./llm.ts";
 import type { ThinkingLevelName } from "./config.ts";
 
@@ -37,17 +37,28 @@ export function createGeminiLlm(opts: GeminiOptions): LlmClient {
   const thinking = opts.thinkingLevel ? { thinkingConfig: { thinkingLevel: LEVELS[opts.thinkingLevel] } } : {};
 
   return {
-    async classify(text) {
+    async classify(text, context) {
       const res = await ai.models.generateContent({
         model: opts.classifierModel,
-        contents: [{ role: "user", parts: [{ text: wrapForClassifier(text) }] }],
-        // Thinking tokens count against maxOutputTokens, so leave room for them.
-        config: { systemInstruction: CLASSIFIER_SYSTEM, maxOutputTokens: 1024, ...thinking },
+        contents: [{ role: "user", parts: [{ text: wrapForClassifier(text, context) }] }],
+        config: {
+          systemInstruction: CLASSIFIER_SYSTEM,
+          // Thinking tokens count against maxOutputTokens, so leave room for them.
+          maxOutputTokens: 1024,
+          // Structured output: the answer is {"verdict":"SAFE"|"UNSAFE"}, so a stray full stop or
+          // markdown cannot turn a harmless message into a block.
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: { verdict: { type: Type.STRING, enum: ["SAFE", "UNSAFE"] } },
+            required: ["verdict"],
+          },
+          ...thinking,
+        },
       });
       // A prompt that Gemini itself blocked is treated as an attack.
       if (res.promptFeedback?.blockReason) return "UNSAFE";
-      // Fail closed: anything other than exactly "SAFE" counts as UNSAFE.
-      return (res.text ?? "").trim().toUpperCase() === "SAFE" ? "SAFE" : "UNSAFE";
+      return parseVerdict(res.text);
     },
 
     async reply(system, history) {
@@ -71,7 +82,16 @@ export function createGeminiLlm(opts: GeminiOptions): LlmClient {
             "if finishReason is MAX_TOKENS, raise MAX_OUTPUT_TOKENS or set THINKING_LEVEL=low",
         );
       }
-      return { kind: "text", text };
+      // A reply cut by the token limit is trimmed to its last full sentence (or marked with an ellipsis).
+      return { kind: "text", text: finish === FinishReason.MAX_TOKENS ? trimTruncated(text) : text };
     },
   };
+}
+
+/** Cuts a token-limited reply at the last sentence end, but only if that keeps a useful part of it. */
+export function trimTruncated(text: string): string {
+  let cut = -1;
+  for (const m of text.matchAll(/[.!?。！？](?=\s|$)/gu)) cut = m.index!;
+  if (cut >= text.length * 0.3) return text.slice(0, cut + 1).trim();
+  return text.trimEnd() + "…";
 }

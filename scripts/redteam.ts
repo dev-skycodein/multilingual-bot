@@ -15,7 +15,7 @@ import { buildSystemPrompt } from "../src/prompt.ts";
 import { createLlm, keyVariable } from "../src/llm-factory.ts";
 import { SessionStore } from "../src/sessions.ts";
 import { createOutputGuard } from "../src/guards/output.ts";
-import { SlidingWindowLimiter, DailyCap } from "../src/guards/ratelimit.ts";
+import { SlidingWindowLimiter, DailyCap, KeyedDailyCap } from "../src/guards/ratelimit.ts";
 import { handleChat } from "../src/chat.ts";
 import type { ChatDeps } from "../src/chat.ts";
 import { buildAttacks } from "./attacks.ts";
@@ -38,6 +38,7 @@ const deps: ChatDeps = {
   systemPrompt,
   limiter: new SlidingWindowLimiter(1_000_000, 60_000),
   daily: new DailyCap(1_000_000),
+  clientDaily: new KeyedDailyCap(1_000_000),
   log: (event) => events.push(event),
 };
 

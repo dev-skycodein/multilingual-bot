@@ -8,3 +8,5 @@ node_modules/
 .vercel
 *.bak*
 memory*.md
+redteam-*.jsonl
+*-results.jsonl

@@ -15,6 +15,12 @@ export interface Config {
   maxOutputTokens: number;
   ratePerMinute: number;
   dailyRequestCap: number;
+  /** Requests one client (IP) may make per UTC day. */
+  perClientDailyCap: number;
+  /** Number of trusted reverse proxies in front of us; 0 = use the socket address and ignore X-Forwarded-For. */
+  trustProxyHops: number;
+  /** Host header values accepted (lower case, no port). Empty = no check. */
+  allowedHosts: string[];
   sessionTtlMs: number;
   maxSessions: number;
 }
@@ -48,11 +54,23 @@ function oneOf<T extends string>(env: NodeJS.ProcessEnv, name: string, allowed: 
   return value as T;
 }
 
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+function allowedHosts(env: NodeJS.ProcessEnv, host: string): string[] {
+  const raw = env.ALLOWED_HOSTS;
+  if (raw !== undefined && raw.trim() !== "") {
+    return raw.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+  }
+  // On a loopback address only local names are valid. This blocks DNS-rebinding pages.
+  return LOOPBACK.has(host.toLowerCase()) ? ["localhost", "127.0.0.1", "[::1]"] : [];
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const provider = oneOf(env, "LLM_PROVIDER", ["gemini", "anthropic"] as const) ?? "gemini";
   const defaults = DEFAULT_MODELS[provider];
+  const host = env.HOST || "127.0.0.1";
   return {
-    host: env.HOST || "127.0.0.1",
+    host,
     port: int(env, "PORT", 3000, 1, 65535),
     productName: env.PRODUCT_NAME || "OpBritops",
     provider,
@@ -64,6 +82,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxOutputTokens: int(env, "MAX_OUTPUT_TOKENS", 600, 50, 4000),
     ratePerMinute: int(env, "RATE_PER_MINUTE", 15, 1, 1000),
     dailyRequestCap: int(env, "DAILY_REQUEST_CAP", 2000, 1, 1_000_000),
+    perClientDailyCap: int(env, "PER_CLIENT_DAILY_CAP", 200, 1, 1_000_000),
+    trustProxyHops: int(env, "TRUST_PROXY_HOPS", 0, 0, 5),
+    allowedHosts: allowedHosts(env, host),
     sessionTtlMs: 30 * 60 * 1000,
     maxSessions: 5000,
   };

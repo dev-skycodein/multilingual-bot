@@ -57,3 +57,34 @@ export class DailyCap {
     return true;
   }
 }
+
+/**
+ * Caps requests per client per UTC day. It stops one client from using up the global DailyCap for
+ * everybody. If more than MAX_KEYS different clients show up in one day, new clients are refused
+ * (the table must stay bounded).
+ */
+export class KeyedDailyCap {
+  private static readonly MAX_KEYS = 50_000;
+  private day = "";
+  private counts = new Map<string, number>();
+  private readonly cap: number;
+  private readonly now: () => number;
+
+  constructor(cap: number, now: () => number = Date.now) {
+    this.cap = cap;
+    this.now = now;
+  }
+
+  allow(key: string): boolean {
+    const today = new Date(this.now()).toISOString().slice(0, 10);
+    if (today !== this.day) {
+      this.day = today;
+      this.counts.clear();
+    }
+    const n = this.counts.get(key);
+    if (n === undefined && this.counts.size >= KeyedDailyCap.MAX_KEYS) return false;
+    if ((n ?? 0) >= this.cap) return false;
+    this.counts.set(key, (n ?? 0) + 1);
+    return true;
+  }
+}
