@@ -1,4 +1,4 @@
-export type Provider = "gemini" | "anthropic";
+export type Provider = "gemini" | "anthropic" | "skycodein";
 export type ThinkingLevelName = "minimal" | "low" | "medium" | "high";
 
 export interface Config {
@@ -6,6 +6,8 @@ export interface Config {
   port: number;
   productName: string;
   provider: Provider;
+  /** SkyCodein provider only: the API's /v1 address. */
+  skycodeinBaseUrl: string;
   model: string;
   classifierModel: string;
   /** Gemini only. Unset = the model's own default. */
@@ -32,6 +34,8 @@ const DEFAULT_MODELS: Record<Provider, { model: string; classifierModel: string 
   // tests, while gemini-3.5-flash-lite worked, so the lite model is the default for both roles.
   gemini: { model: "gemini-3.5-flash-lite", classifierModel: "gemini-3.5-flash-lite" },
   anthropic: { model: "claude-sonnet-5-5", classifierModel: "claude-haiku-5-5" },
+  // Not the auto-router "skycodein": it picks the coding assistant from the message text, which an attacker could steer.
+  skycodein: { model: "skycodein-general", classifierModel: "skycodein-general" },
 };
 
 function int(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
@@ -66,7 +70,7 @@ function allowedHosts(env: NodeJS.ProcessEnv, host: string): string[] {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const provider = oneOf(env, "LLM_PROVIDER", ["gemini", "anthropic"] as const) ?? "gemini";
+  const provider = oneOf(env, "LLM_PROVIDER", ["gemini", "anthropic", "skycodein"] as const) ?? "gemini";
   const defaults = DEFAULT_MODELS[provider];
   const host = env.HOST || "127.0.0.1";
   return {
@@ -74,6 +78,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: int(env, "PORT", 3000, 1, 65535),
     productName: env.PRODUCT_NAME || "OpBritops",
     provider,
+    skycodeinBaseUrl: env.SKYCODEIN_BASE_URL || "http://192.168.18.14:8000/v1",
     model: env.MODEL || defaults.model,
     classifierModel: env.CLASSIFIER_MODEL || defaults.classifierModel,
     thinkingLevel: oneOf(env, "THINKING_LEVEL", ["minimal", "low", "medium", "high"] as const),

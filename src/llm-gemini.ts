@@ -1,6 +1,6 @@
 import { GoogleGenAI, FinishReason, ThinkingLevel, Type } from "@google/genai";
 import type { GenerateContentParameters, GenerateContentResponse } from "@google/genai";
-import { CLASSIFIER_SYSTEM, EmptyReplyError, parseVerdict, wrapForClassifier } from "./llm.ts";
+import { CLASSIFIER_SYSTEM, EmptyReplyError, parseVerdict, trimTruncated, wrapForClassifier } from "./llm.ts";
 import type { LlmClient } from "./llm.ts";
 import type { ThinkingLevelName } from "./config.ts";
 
@@ -88,10 +88,4 @@ export function createGeminiLlm(opts: GeminiOptions): LlmClient {
   };
 }
 
-/** Cuts a token-limited reply at the last sentence end, but only if that keeps a useful part of it. */
-export function trimTruncated(text: string): string {
-  let cut = -1;
-  for (const m of text.matchAll(/[.!?。！？](?=\s|$)/gu)) cut = m.index!;
-  if (cut >= text.length * 0.3) return text.slice(0, cut + 1).trim();
-  return text.trimEnd() + "…";
-}
+export { trimTruncated };

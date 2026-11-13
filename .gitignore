@@ -10,3 +10,6 @@ node_modules/
 memory*.md
 redteam-*.jsonl
 *-results.jsonl
+
+# local API docs (internal address, may sit next to keys): never commit
+API.md

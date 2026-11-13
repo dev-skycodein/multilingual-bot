@@ -60,6 +60,14 @@ export function parseVerdict(raw: string | undefined): Verdict {
   return text.replace(/[*_`"'.!\s]/g, "").toUpperCase() === "SAFE" ? "SAFE" : "UNSAFE";
 }
 
+/** Cuts a token-limited reply at the last sentence end, but only if that keeps a useful part of it. */
+export function trimTruncated(text: string): string {
+  let cut = -1;
+  for (const m of text.matchAll(/[.!?。！？](?=\s|$)/gu)) cut = m.index!;
+  if (cut >= text.length * 0.3) return text.slice(0, cut + 1).trim();
+  return text.trimEnd() + "…";
+}
+
 /** Thrown when the model answers but there is no usable text (for example the token budget ran out). */
 export class EmptyReplyError extends Error {
   override name = "EmptyReplyError";
