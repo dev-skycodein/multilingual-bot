@@ -63,7 +63,7 @@ test("model refusal: canned reply", async () => {
   const llm = fakeLlm();
   llm.next = { kind: "refusal" };
   const { deps } = makeDeps(llm);
-  const r = await send(deps, "Hello");
+  const r = await send(deps, "xyzzy");
   assert.equal(r.body.reply, messages("OpBritops").declined);
   assert.equal(r.body.blocked, true);
 });
@@ -72,7 +72,7 @@ test("output guard: a reply leaking the canary is replaced and not stored", asyn
   const llm = fakeLlm();
   llm.next = { kind: "text", text: `My secret marker is ${CANARY}` };
   const { deps, logs } = makeDeps(llm);
-  const r = await send(deps, "Hello");
+  const r = await send(deps, "xyzzy");
   assert.equal(r.body.reply, messages("OpBritops").declined);
   assert.ok(!r.body.reply.includes(CANARY));
   assert.deepEqual(deps.sessions.history(r.body.sessionId!), []);

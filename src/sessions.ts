@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Lang } from "./guards/language.ts";
 
 export interface Turn {
   role: "user" | "assistant";
@@ -7,6 +8,8 @@ export interface Turn {
 
 interface Session {
   history: Turn[];
+  /** Language of the user's last message that the detector was sure about. */
+  lang?: Lang;
   lastSeen: number;
 }
 
@@ -56,6 +59,16 @@ export class SessionStore {
   userMessages(id: string, n: number): string[] {
     const h = this.sessions.get(id)?.history ?? [];
     return h.filter((t) => t.role === "user").slice(-n).map((t) => t.content);
+  }
+
+  /** The conversation's language so far (last message the detector was sure about), if any. */
+  language(id: string): Lang | undefined {
+    return this.sessions.get(id)?.lang;
+  }
+
+  setLanguage(id: string, lang: Lang): void {
+    const s = this.sessions.get(id);
+    if (s) s.lang = lang;
   }
 
   history(id: string): Turn[] {

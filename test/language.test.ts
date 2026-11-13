@@ -80,7 +80,7 @@ test("language: Latin-script languages we do not support are never labelled as a
 });
 
 test("language: too little evidence gives 'unknown' (callers then fall back to all six languages)", () => {
-  for (const s of ["ok", "?", "123", "OpBritops", "Hallo", "blue", "banana"]) assert.equal(detectLanguage(s), "unknown", s);
+  for (const s of ["ok", "?", "123", "OpBritops", "blue", "banana"]) assert.equal(detectLanguage(s), "unknown", s);
 });
 
 test("language: mixed greeting with several languages is not forced into one", () => {

@@ -59,18 +59,18 @@ test("hint: a confidently detected language is told to the main model (server-ma
   assert.equal(system, systemPrompt + languageHint("es"));
 });
 
-test("hint: non-supported scripts get the English-only instruction, unknown gets no hint", async () => {
+test("hint: non-supported scripts get the English-only instruction, an undetected language gets the generic hint", async () => {
   const llm = fakeLlm();
   const { deps, systemPrompt } = makeDeps(llm);
   await send(deps, "你好，你能做什么？");
   assert.match(llm.replyCalls[0]!.system, /outside the six/);
   await send(deps, "banana");
-  assert.equal(llm.replyCalls[1]!.system, systemPrompt);
+  assert.equal(llm.replyCalls[1]!.system, systemPrompt + languageHint("unknown"));
 });
 
 test("hint: the hint text only ever comes from a fixed list", () => {
   for (const l of ["en", "es", "fr", "pt", "de", "it", "other"] as const) assert.ok(languageHint(l).length > 20);
-  assert.equal(languageHint("unknown"), "");
+  assert.ok(languageHint("unknown").length > 20, "an undetected language still gets a hint");
 });
 
 test("prompt: language rules follow the language the message is written in, not the one it mentions", () => {

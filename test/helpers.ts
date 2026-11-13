@@ -15,6 +15,8 @@ export interface FakeLlm extends LlmClient {
   replyCalls: { system: string; history: Turn[] }[];
   verdict: Verdict | Error;
   next: ReplyResult | Error;
+  /** Replies handed out first, one per call; when empty `next` is used. */
+  queue: ReplyResult[];
 }
 
 export function fakeLlm(): FakeLlm {
@@ -24,6 +26,7 @@ export function fakeLlm(): FakeLlm {
     replyCalls: [],
     verdict: "SAFE",
     next: { kind: "text", text: "Hello! I can help with OpBritops." },
+    queue: [],
     async classify(text, context) {
       llm.classifyCalls.push(text);
       llm.classifyContexts.push(context);
@@ -32,6 +35,8 @@ export function fakeLlm(): FakeLlm {
     },
     async reply(system, history) {
       llm.replyCalls.push({ system, history });
+      const queued = llm.queue.shift();
+      if (queued) return queued;
       if (llm.next instanceof Error) throw llm.next;
       return llm.next;
     },
