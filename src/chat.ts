@@ -7,6 +7,7 @@ import { normalizeInput } from "./guards/input.ts";
 import { detectLanguage, candidateLanguages, SUPPORTED_LANGS } from "./guards/language.ts";
 import { languageListProblem } from "./guards/langlist.ts";
 import type { Detected, Lang } from "./guards/language.ts";
+import { resolveLanguage } from "./guards/langlock.ts";
 import { languageHint, retryNote } from "./prompt.ts";
 
 export interface ChatDeps {
@@ -128,11 +129,16 @@ export async function handleChat(
   const product = deps.config.productName;
   const msg = messages(product);
 
+  // The conversation's language, read without opening a session: used for the fixed messages that are sent before
+  // anything else happens (busy, invalid). No session yet means all six languages.
+  const known = deps.sessions.peekLanguage(req.sessionId);
+  const fixed = (kind: Kind, lang: Detected) => (lang === "unknown" && !known ? msg[kind] : messageFor(product, kind, lang === "unknown" ? known! : lang));
+
   // 1. Per-IP limit first: cheapest check. It also counts invalid requests, so a client cannot
   //    flood us with junk for free.
   if (!deps.limiter.allow(req.clientKey)) {
     deps.log("rate_limited");
-    return { status: 429, body: { reply: msg.busy, blocked: true } };
+    return { status: 429, body: { reply: fixed("busy", known ?? "unknown"), blocked: true } };
   }
 
   // 2. Input validation and Unicode clean-up. Invalid input costs nothing and is refused before it
@@ -140,25 +146,24 @@ export async function handleChat(
   const input = normalizeInput(req.message, deps.config.maxInputChars);
   if (!input.ok) {
     deps.log("invalid_input", { reason: input.reason });
-    return { status: 400, body: { reply: msg.invalid, blocked: true } };
+    return { status: 400, body: { reply: fixed("invalid", known ?? "unknown"), blocked: true } };
   }
   const detected = detectLanguage(input.text);
+  // Language from this message and the conversation so far only (the classifier has not run yet).
+  const early = resolveLanguage({ text: input.text, detected, sticky: known }).lang;
 
   // 3. Daily caps, per client first so one client cannot use up the global cap for everybody.
   if (!deps.clientDaily.allow(req.clientKey)) {
     deps.log("client_daily_cap_reached");
-    return { status: 429, body: { reply: messageFor(product, "busy", detected), blocked: true } };
+    return { status: 429, body: { reply: fixed("busy", early), blocked: true } };
   }
   if (!deps.daily.allow()) {
     deps.log("daily_cap_reached");
-    return { status: 503, body: { reply: messageFor(product, "unavailable", detected), blocked: true } };
+    return { status: 503, body: { reply: fixed("unavailable", early), blocked: true } };
   }
 
   const sessionId = deps.sessions.open(req.sessionId);
-  // When this message is too short or too mixed to detect, the conversation's language so far is the best guess
-  // for fixed messages and for the hint. It is never used to override a language the detector is sure about.
   const sticky = deps.sessions.language(sessionId);
-  const stickyShown: Detected = detected === "unknown" && sticky ? sticky : detected;
 
   // 4. Injection classifier. Fails closed: if it cannot answer, nothing goes on. It also sees the
   //    user's earlier messages, so a set-up in one turn and a trigger in the next is visible to it.
@@ -179,12 +184,16 @@ export async function handleChat(
     }
   } catch (e) {
     deps.log("classifier_error", errInfo(e));
-    return { status: 503, body: { sessionId, reply: messageFor(product, "unavailable", stickyShown), blocked: true } };
+    return { status: 503, body: { sessionId, reply: fixed("unavailable", early), blocked: true } };
   }
-  // The word-list detector wins when it is sure. When it is not, the classifier's language is used (the model reads
-  // the whole message, the word lists only know common words). Both only choose a language: they cannot loosen a rule.
-  const lang: Detected = detected === "unknown" && modelLang ? modelLang : detected;
-  const shown: Detected = lang === "unknown" && sticky ? sticky : lang;
+  // The language lock (see guards/langlock.ts): an explicit request or a sure message of 3+ words changes the
+  // conversation's language; a short message never does; the classifier's language is a guess and is never saved.
+  // This only chooses a language: it cannot loosen a rule. It is saved before the scope and attack gates, so a
+  // first message that is declined or off-topic still sets the language for what follows.
+  const resolved = resolveLanguage({ text: input.text, detected, modelLang, sticky });
+  const lang: Detected = resolved.lang;
+  const shown: Detected = lang;
+  if (resolved.save) deps.sessions.setLanguage(sessionId, resolved.save);
   if (verdict !== "SAFE") {
     deps.log("blocked_by_classifier");
     // The blocked message is NOT stored, so it cannot poison later turns.
@@ -200,7 +209,7 @@ export async function handleChat(
   }
 
   // 5. Main model, with server-held history plus this message and a server-made language hint.
-  const system = deps.systemPrompt + languageHint(lang, sticky);
+  const system = deps.systemPrompt + languageHint(lang, sticky, resolved.source);
   const turns = [...deps.sessions.history(sessionId), { role: "user" as const, content: input.text }];
   let result;
   try {
@@ -266,7 +275,6 @@ export async function handleChat(
   }
 
   deps.sessions.append(sessionId, input.text, text);
-  if (SUPPORTED_LANGS.includes(lang as Lang)) deps.sessions.setLanguage(sessionId, lang as Lang);
   return { status: 200, body: { sessionId, reply: text } };
 }
 
@@ -281,8 +289,9 @@ function replyLanguages(lang: Detected, text: string): Lang[] {
   return [lang];
 }
 
-/** True only when the reply is clearly written in one of the six that is not allowed. A reply we cannot classify passes. */
+/** True when the reply is clearly in one of the six that is not allowed, or in a script outside the six. A reply we cannot classify passes. */
 function wrongLanguage(text: string, allowed: Lang[]): boolean {
   const got = detectLanguage(text);
+  if (got === "other") return true; // a reply in a script outside the six is never allowed: the rule is English for those
   return SUPPORTED_LANGS.includes(got as Lang) && !allowed.includes(got as Lang);
 }

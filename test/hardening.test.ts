@@ -76,8 +76,9 @@ test("hint: the hint text only ever comes from a fixed list", () => {
 
 test("prompt: language rules follow the language the message is written in, not the one it mentions", () => {
   const p = buildSystemPrompt("OpBritops", CANARY);
-  assert.match(p, /language a message is written in/i);
-  assert.match(p, /names or asks for another language/i);
+  assert.match(p, /language hint added by the server/i);
+  assert.match(p, /translation request .* does not change the language/i);
+  assert.match(p, /request for any other language .* answered in English/i);
   assert.match(p, /never tell .* supported language .* unsupported/i);
   assert.match(p, /including refusals and polite declines/);
   assert.match(p, /Never switch to English because you are declining/);

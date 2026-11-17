@@ -66,6 +66,14 @@ export class SessionStore {
     return this.sessions.get(id)?.lang;
   }
 
+  /** The language of an existing, live session by the id a client sent. Changes nothing (no session is opened). */
+  peekLanguage(requestedId: unknown): Lang | undefined {
+    if (typeof requestedId !== "string" || !ID_FORMAT.test(requestedId)) return undefined;
+    const s = this.sessions.get(requestedId);
+    if (!s || this.now() - s.lastSeen > this.ttlMs) return undefined;
+    return s.lang;
+  }
+
   setLanguage(id: string, lang: Lang): void {
     const s = this.sessions.get(id);
     if (s) s.lang = lang;

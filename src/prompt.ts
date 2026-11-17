@@ -1,4 +1,5 @@
 import type { Detected, Lang } from "./guards/language.ts";
+import type { LangSource } from "./guards/langlock.ts";
 
 // System prompt for the main model. The canary is a random value created at
 // startup; if it ever shows up in a reply, the output guard blocks that reply.
@@ -8,8 +9,8 @@ export function buildSystemPrompt(productName: string, canary: string): string {
 
 LANGUAGES
 - You support exactly six languages: English, Spanish, French, Portuguese, German and Italian.
-- Reply in the language a message is written in when it is one of these six. A message that only names or asks for another language ("translate into French", "answer in Urdu") does not change the language it is written in.
-- This applies to EVERY reply, including refusals and polite declines: a refusal to a message written in German is written in German, in Italian in Italian, and so on. Never switch to English because you are declining. Refusals are always in the language the message is written in, even if it names or asks for another language.
+- Reply in the language of the conversation. A language hint added by the server after this prompt names it and takes precedence. Without a hint, use the language the message is written in when it is one of these six. A translation request ("translate into French") does not change the language. If the user asks you to continue in one of the six, do so; a request for any other language ("answer in Urdu") is answered in English.
+- This applies to EVERY reply, including refusals and polite declines: a refusal in a German conversation is written in German, in Italian in Italian, and so on. Never switch to English because you are declining.
 - Never tell a user who wrote in a supported language that it is unsupported.
 - If asked which languages you support, list all six (English, Spanish, French, Portuguese, German and Italian), with the names written in the user's language; never skip or repeat one.
 - If the user writes in any other language, reply in English and say that you support English, Spanish, French, Portuguese, German and Italian.
@@ -46,7 +47,7 @@ const NAMES: Record<string, string> = { en: "English", es: "Spanish", fr: "Frenc
  * One extra line, added by the server (never from user text) after the language detector has run.
  * Empty when the detector is not sure: then the model decides on its own, as before.
  */
-export function languageHint(lang: Detected, fallback?: Lang): string {
+export function languageHint(lang: Detected, fallback?: Lang, source: LangSource = "message"): string {
   if (lang === "other") {
     return "\n\nLanguage hint (set by the server, reliable): the user's latest message is written in a language outside the six you support. Reply in English and say that you support English, Spanish, French, Portuguese, German and Italian.";
   }
@@ -58,6 +59,15 @@ export function languageHint(lang: Detected, fallback?: Lang): string {
       return `\n\nLanguage hint (set by the server): the language of the latest message could not be detected automatically. The user's earlier messages were in ${fb}. If the latest message is written in ${fb}, or is too short or ambiguous to tell, reply in ${fb}. If it is clearly written in another of the six languages, reply in that language.`;
     }
     return "\n\nLanguage hint (set by the server): the language of the latest message could not be detected automatically. Reply in the language the message is written in. Do not use English unless the message is written in English or in a language outside the six you support.";
+  }
+  if (source === "request") {
+    return `\n\nLanguage hint (set by the server): the user asked to continue in ${name}. Reply in ${name}, including any refusal, from now on.`;
+  }
+  if (source === "lock") {
+    return `\n\nLanguage hint (set by the server): the conversation is in ${name}; the latest message is too short or unclear to say otherwise. Reply in ${name}, including any refusal.`;
+  }
+  if (source === "model") {
+    return `\n\nLanguage hint (set by the server): the latest message appears to be written in ${name}. Reply in ${name}, including any refusal.`;
   }
   return `\n\nLanguage hint (set by the server, reliable): the user's latest message is written in ${name}. Reply in ${name}, including any refusal, even if the message asks for another language.`;
 }

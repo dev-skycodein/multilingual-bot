@@ -42,7 +42,7 @@ test("chat: a later message that cannot be detected follows the language of the 
   const { deps } = makeDeps(llm);
   const first = await send(deps, IT_Q);
   await send(deps, "xyzzy plugh", first.body.sessionId);
-  assert.match(llm.replyCalls[1]!.system, /earlier messages were in Italian/);
+  assert.match(llm.replyCalls[1]!.system, /conversation is in Italian/);
 });
 
 test("chat: the fixed decline for an undetected message uses the conversation's language", async () => {
@@ -229,15 +229,15 @@ test("chat: a classifier language of 'other' gives the English-only instruction"
   assert.match(llm.replyCalls[0]!.system, /outside the six/);
 });
 
-test("chat: the classifier's language is remembered for the next, shorter message", async () => {
+test("chat: the classifier's language from a real message (3+ words) is remembered for the next, shorter one", async () => {
   const llm = fakeLlm();
   llm.language = "it";
   llm.next = IT_DECLINE;
   const { deps } = makeDeps(llm);
-  const first = await send(deps, "xyzzy plugh");
+  const first = await send(deps, "xyzzy plugh quux");
   llm.language = undefined;
   await send(deps, "plugh xyzzy", first.body.sessionId);
-  assert.match(llm.replyCalls[1]!.system, /earlier messages were in Italian/);
+  assert.match(llm.replyCalls[1]!.system, /conversation is in Italian/);
 });
 
 test("chat: without a classifier language nothing changes (the generic hint is used)", async () => {
