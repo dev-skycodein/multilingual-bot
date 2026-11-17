@@ -167,14 +167,30 @@ test("fitToBudget: if even the newest message does not fit, it is cut (never the
 });
 
 test("config: provider skycodein has its own defaults, base URL, and key variable", () => {
-  const c = loadConfig({ LLM_PROVIDER: "skycodein" } as NodeJS.ProcessEnv);
+  const c = loadConfig({ LLM_PROVIDER: "skycodein", SKYCODEIN_BASE_URL: "http://10.0.0.5:9000/v1" } as NodeJS.ProcessEnv);
   assert.equal(c.provider, "skycodein");
   assert.equal(c.model, "skycodein-general");
   assert.equal(c.classifierModel, "skycodein-general");
-  assert.equal(c.skycodeinBaseUrl, "http://192.168.18.14:8000/v1");
+  assert.equal(c.skycodeinBaseUrl, "http://10.0.0.5:9000/v1");
   assert.equal(keyVariable(c), "SKYCODEIN_API_KEY");
-  const d = loadConfig({ LLM_PROVIDER: "skycodein", SKYCODEIN_BASE_URL: "http://10.0.0.5:9000/v1" } as NodeJS.ProcessEnv);
-  assert.equal(d.skycodeinBaseUrl, "http://10.0.0.5:9000/v1");
+});
+
+// Audit 2026-11-17 (low): a LAN address was the committed default (and that address no longer exists).
+test("config: the SkyCodein address has no default; it is required for SkyCodein and checked when given", () => {
+  assert.throws(() => loadConfig({ LLM_PROVIDER: "skycodein" } as NodeJS.ProcessEnv), /SKYCODEIN_BASE_URL is not set/);
+  assert.throws(() => loadConfig({ LLM_PROVIDER: "skycodein", SKYCODEIN_BASE_URL: "   " } as NodeJS.ProcessEnv), /SKYCODEIN_BASE_URL is not set/);
+  assert.throws(() => loadConfig({ LLM_PROVIDER: "skycodein", SKYCODEIN_BASE_URL: "not a url" } as NodeJS.ProcessEnv), /Invalid SKYCODEIN_BASE_URL/);
+  assert.throws(() => loadConfig({ LLM_PROVIDER: "skycodein", SKYCODEIN_BASE_URL: "ftp://host/v1" } as NodeJS.ProcessEnv), /http:\/\//);
+  // Other providers do not need it.
+  assert.equal(loadConfig({} as NodeJS.ProcessEnv).skycodeinBaseUrl, "");
+  assert.equal(loadConfig({ LLM_PROVIDER: "gemini" } as NodeJS.ProcessEnv).skycodeinBaseUrl, "");
+});
+
+test("no private-network address is written into the committed source or the example config", async () => {
+  const { readFileSync, readdirSync } = await import("node:fs");
+  const files = [...readdirSync("src", { recursive: true }).map(String).filter((f) => f.endsWith(".ts")).map((f) => `src/${f}`), ".env.example"];
+  assert.ok(files.length > 10, "the scan must really see the source files");
+  for (const f of files) assert.doesNotMatch(readFileSync(f, "utf8"), /\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b/, f);
 });
 
 // Live finding: the API sometimes prefixes its own status text to the answer.

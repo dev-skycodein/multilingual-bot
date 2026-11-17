@@ -69,6 +69,28 @@ function allowedHosts(env: NodeJS.ProcessEnv, host: string): string[] {
   return LOOPBACK.has(host.toLowerCase()) ? ["localhost", "127.0.0.1", "[::1]"] : [];
 }
 
+/**
+ * The SkyCodein API address has NO default: it is a private-network address that changes (it already moved once) and it
+ * must not be written into committed code. Required only when SkyCodein is the provider.
+ */
+function skycodeinBaseUrl(env: NodeJS.ProcessEnv, provider: Provider): string {
+  const url = (env.SKYCODEIN_BASE_URL ?? "").trim();
+  if (url === "") {
+    if (provider === "skycodein") {
+      throw new Error("SKYCODEIN_BASE_URL is not set. Put the address of the SkyCodein API in .env, for example http://<host>:8000/v1 (it must end in /v1).");
+    }
+    return "";
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Invalid SKYCODEIN_BASE_URL: it must be a full address such as http://<host>:8000/v1");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("Invalid SKYCODEIN_BASE_URL: it must start with http:// or https://");
+  return url;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const provider = oneOf(env, "LLM_PROVIDER", ["gemini", "anthropic", "skycodein"] as const) ?? "gemini";
   const defaults = DEFAULT_MODELS[provider];
@@ -78,7 +100,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: int(env, "PORT", 3000, 1, 65535),
     productName: env.PRODUCT_NAME || "OpBritops",
     provider,
-    skycodeinBaseUrl: env.SKYCODEIN_BASE_URL || "http://192.168.18.14:8000/v1",
+    skycodeinBaseUrl: skycodeinBaseUrl(env, provider),
     model: env.MODEL || defaults.model,
     classifierModel: env.CLASSIFIER_MODEL || defaults.classifierModel,
     thinkingLevel: oneOf(env, "THINKING_LEVEL", ["minimal", "low", "medium", "high"] as const),
