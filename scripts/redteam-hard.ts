@@ -17,6 +17,8 @@ import { createOutputGuard } from "../src/guards/output.ts";
 import { SlidingWindowLimiter, DailyCap, KeyedDailyCap } from "../src/guards/ratelimit.ts";
 import { handleChat, messages } from "../src/chat.ts";
 import type { ChatDeps } from "../src/chat.ts";
+import { spyLlm } from "./spy-llm.ts";
+import type { SpyControl } from "./spy-llm.ts";
 import { buildHardItems } from "./attacks-hard.ts";
 import type { HardItem } from "./attacks-hard.ts";
 
@@ -30,21 +32,8 @@ if (!process.env[keyVariable(config)]) {
 const canary = `CANARY-${randomUUID()}`;
 const systemPrompt = buildSystemPrompt(config.productName, canary);
 const real = createLlm(config);
-let lastErr = "";
-let forceSafe = false;
-const llm = {
-  async classify(t: string, ctx?: string[]) {
-    if (forceSafe) return "SAFE" as const;
-    try { return await real.classify(t, ctx); } catch (e) { lastErr = describe(e); throw e; }
-  },
-  async reply(s: string, h: Parameters<typeof real.reply>[1]) {
-    try { return await real.reply(s, h); } catch (e) { lastErr = describe(e); throw e; }
-  },
-};
-function describe(e: unknown): string {
-  const x = e as { name?: string; status?: number; message?: string };
-  return `${x?.name} status=${x?.status} ${String(x?.message).slice(0, 300)}`;
-}
+const ctl: SpyControl = { forceSafe: false, lastErr: "" };
+const llm = spyLlm(real, ctl);
 let events: string[] = [];
 const deps: ChatDeps = {
   config, llm, systemPrompt,
@@ -123,7 +112,7 @@ async function runOne(it: HardItem) {
       events = [];
       r = await handleChat(deps as any, { sessionId, message: it.turns[ti], clientKey: "rt" });
       if (events.some((e) => e.endsWith(":429"))) {
-        if (attempt === 0) { console.log(`   429 -> waiting 65 s then retrying once (${lastErr.slice(0, 200)})`); await sleep(65_000); continue; }
+        if (attempt === 0) { console.log(`   429 -> waiting 65 s then retrying once (${ctl.lastErr.slice(0, 200)})`); await sleep(65_000); continue; }
         aborted = true; return { turns, abort: true };
       }
       break;
@@ -143,8 +132,8 @@ for (const it of items) {
   const prev = done.get(it.id);
   if (prev && !prev.turns.some((t: any) => t.status >= 500)) continue;
   await sleep(DELAY);
-  forceSafe = !!it.bypass; const res = await runOne(it); forceSafe = false;
-  if ((res as any).abort) { console.log(`ABORT at ${it.id}: quota 429 twice. lastErr=${lastErr.slice(0, 300)}`); break; }
+  ctl.forceSafe = !!it.bypass; const res = await runOne(it); ctl.forceSafe = false;
+  if ((res as any).abort) { console.log(`ABORT at ${it.id}: quota 429 twice. lastErr=${ctl.lastErr.slice(0, 300)}`); break; }
   const rec = { bypass: !!it.bypass, id: it.id, cat: it.cat, lang: it.lang, kind: it.kind, expect: it.expect ?? null, turns: res.turns };
   appendFileSync(OUT, JSON.stringify(rec) + "\n");
   const last = res.turns[res.turns.length - 1];
