@@ -211,10 +211,11 @@ test("skycodein classifyWithLanguage: asks for verdict and language, returns bot
   ] as const) {
     const { fetchFn, calls } = fakeFetch(completion(raw));
     const r = await make(fetchFn).classifyWithLanguage!("hi", ["earlier"]);
-    assert.deepEqual(r, { verdict: wantV, language: wantL, scope: undefined }, raw);
+    // JSON without a scope fails closed to off_topic; a bare word (no structured output) leaves the scope unset.
+    assert.deepEqual(r, { verdict: wantV, language: wantL, scope: raw.startsWith("{") ? "off_topic" : undefined }, raw);
     const schema = calls[0]!.body.response_format.json_schema.schema;
     assert.deepEqual(schema.properties.language.enum, ["en", "es", "fr", "pt", "de", "it", "other"]);
-    assert.deepEqual(schema.required, ["verdict"]);
+    assert.deepEqual(schema.required, ["verdict", "scope"]);
     assert.match(calls[0]!.body.messages[0].content, /"language"/);
   }
 });
@@ -227,14 +228,14 @@ test("skycodein classify: still returns only the verdict", async () => {
 // Live finding (browser, 2026-11-14): "Fotosintesi clorofilliana, spiegazione breve" got a full biology answer, because the
 // prompt alone does not keep this model on topic. The classifier now also says whether a message is on topic.
 test("skycodein classifyWithLanguage: asks for the scope too, names the product, and returns it", async () => {
-  for (const [raw, want] of [['{"verdict":"SAFE","language":"it","scope":"off_topic"}', "off_topic"], ['{"verdict":"SAFE","language":"it","scope":"on_topic"}', "on_topic"], ['{"verdict":"SAFE","language":"it","scope":"x"}', undefined]] as const) {
+  for (const [raw, want] of [['{"verdict":"SAFE","language":"it","scope":"off_topic"}', "off_topic"], ['{"verdict":"SAFE","language":"it","scope":"on_topic"}', "on_topic"], ['{"verdict":"SAFE","language":"it","scope":"x"}', "off_topic"]] as const) {
     const { fetchFn, calls } = fakeFetch(completion(raw));
     const llm = make(fetchFn, { productName: "OpBritops" });
     const r = await llm.classifyWithLanguage!("hi");
     assert.equal(r.scope, want, raw);
     const schema = calls[0]!.body.response_format.json_schema.schema;
     assert.deepEqual(schema.properties.scope.enum, ["on_topic", "off_topic"]);
-    assert.deepEqual(schema.required, ["verdict"], "scope and language stay optional");
+    assert.deepEqual(schema.required, ["verdict", "scope"], "scope is required, the language stays optional");
     assert.match(calls[0]!.body.messages[0].content, /"scope"/);
     assert.match(calls[0]!.body.messages[0].content, /OpBritops/);
     assert.ok(calls[0]!.body.max_tokens >= 48);

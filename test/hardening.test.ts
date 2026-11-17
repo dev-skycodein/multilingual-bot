@@ -171,15 +171,21 @@ test("config: new limits have safe defaults and are validated", () => {
 });
 
 test("parseClassification: verdict fails closed, language only when valid", () => {
-  assert.deepEqual(parseClassification('{"verdict":"SAFE","language":"es"}'), { verdict: "SAFE", language: "es", scope: undefined });
-  assert.deepEqual(parseClassification('{"verdict":"SAFE","language":"zz"}'), { verdict: "SAFE", language: undefined, scope: undefined });
+  assert.deepEqual(parseClassification('{"verdict":"SAFE","language":"es"}'), { verdict: "SAFE", language: "es", scope: "off_topic" });
+  assert.deepEqual(parseClassification('{"verdict":"SAFE","language":"zz"}'), { verdict: "SAFE", language: undefined, scope: "off_topic" });
   assert.deepEqual(parseClassification("SAFE."), { verdict: "SAFE", language: undefined, scope: undefined });
   assert.deepEqual(parseClassification(undefined), { verdict: "UNSAFE", language: undefined, scope: undefined });
-  assert.deepEqual(parseClassification('{"verdict":"unsafe","language":"it"}'), { verdict: "UNSAFE", language: "it", scope: undefined });
+  assert.deepEqual(parseClassification('{"verdict":"unsafe","language":"it"}'), { verdict: "UNSAFE", language: "it", scope: "off_topic" });
 });
 
-test("parseClassification: scope is kept only when it is on_topic or off_topic", () => {
+// Audit 2026-11-17: a missing scope let an essay request through to the main model. A structured answer without a valid
+// scope now counts as off topic (the user gets the friendly fixed reply); only an answer with no structure at all (a
+// provider without structured output) leaves the scope unset.
+test("parseClassification: scope is kept only when it is on_topic or off_topic; missing or odd means off_topic", () => {
+  assert.equal(parseClassification('{"verdict":"SAFE"}').scope, "off_topic");
+  assert.equal(parseClassification('{"verdict":"SAFE","scope":null}').scope, "off_topic");
+  assert.equal(parseClassification("SAFE").scope, undefined);
   assert.deepEqual(parseClassification('{"verdict":"SAFE","language":"it","scope":"off_topic"}'), { verdict: "SAFE", language: "it", scope: "off_topic" });
   assert.deepEqual(parseClassification('{"verdict":"SAFE","scope":"on_topic"}'), { verdict: "SAFE", language: undefined, scope: "on_topic" });
-  assert.deepEqual(parseClassification('{"verdict":"SAFE","scope":"maybe"}'), { verdict: "SAFE", language: undefined, scope: undefined });
+  assert.deepEqual(parseClassification('{"verdict":"SAFE","scope":"maybe"}'), { verdict: "SAFE", language: undefined, scope: "off_topic" });
 });

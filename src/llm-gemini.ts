@@ -59,7 +59,7 @@ export function createGeminiLlm(opts: GeminiOptions): LlmClient {
               language: { type: Type.STRING, enum: [...CLASSIFIER_LANGUAGES] },
               scope: { type: Type.STRING, enum: ["on_topic", "off_topic"] },
             },
-            required: ["verdict"],
+            required: ["verdict", "scope"],
           },
           ...thinking,
         },

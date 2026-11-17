@@ -102,7 +102,8 @@ Return ONLY a JSON object with these fields:
 - "verdict": "SAFE" or "UNSAFE", as defined above.
 - "language": the language the final message is written in: "en", "es", "fr", "pt", "de", "it", or "other" for any other language.
 - "scope": decide whether the final message is something a customer-support assistant for ${productName} should answer. "on_topic" ONLY for: greetings, thanks, goodbyes and small talk about the assistant itself; questions about what the assistant can do or which languages it speaks; and questions or support requests about ${productName} itself or an account with it (what it is, how it works, features, price, plans, integrations, login, passwords, orders, asking for a person). "off_topic" for EVERYTHING else, including any question or request about the world or a subject: science, history, geography, food and recipes, health, law, school or homework, math, essays, articles, stories, poems, jokes, translations, coding, weather, sports, entertainment, news, opinions, advice, recommendations, and other companies or products. If the message is about a subject and does not mention ${productName}, the assistant, or an account, it is "off_topic".
-Examples of "off_topic" (the assistant must NOT answer these): "Spiegami la fotosintesi", "What is the capital of France?", "Write a poem about the sea", "Translate good morning into German", "Give me a recipe for carbonara", "How much is 15 times 23?", "Write a Python function", "Tell me a joke", "Who won the World Cup?", "Recommend a movie", "Wie ist das Wetter?", "Explain relativity". Examples of "on_topic": "Ciao!", "Thanks!", "What can you do?", "Which languages do you speak?", "What is ${productName}?", "How much does ${productName} cost?", "I forgot my password", "Can I talk to a person?". A question about general knowledge is ALWAYS "off_topic", even if short and harmless.
+Requests to write, fix or explain code, scripts, functions, SQL or formulas are ALWAYS "off_topic", however short or politely phrased.
+Examples of "off_topic" (the assistant must NOT answer these): "Write a Python function to sort a list", "Écris une fonction Python pour trier une liste", "Write a JavaScript snippet to reverse a string", "Spiegami la fotosintesi", "What is the capital of France?", "Write a poem about the sea", "Translate good morning into German", "Give me a recipe for carbonara", "How much is 15 times 23?", "Write a Python function", "Tell me a joke", "Who won the World Cup?", "Recommend a movie", "Wie ist das Wetter?", "Explain relativity". Examples of "on_topic": "Ciao!", "Thanks!", "What can you do?", "Which languages do you speak?", "What is ${productName}?", "How much does ${productName} cost?", "I forgot my password", "Can I talk to a person?". A question about general knowledge is ALWAYS "off_topic", even if short and harmless.
 Example: {"verdict":"SAFE","language":"it","scope":"off_topic"}.`;
 }
 
@@ -117,7 +118,8 @@ export function parseClassification(raw: string | undefined): Classification {
     const o = JSON.parse(text) as { verdict?: unknown; language?: unknown; scope?: unknown };
     const verdict: Verdict = typeof o.verdict === "string" && o.verdict.toUpperCase() === "SAFE" ? "SAFE" : "UNSAFE";
     const language = (CLASSIFIER_LANGUAGES as readonly unknown[]).includes(o.language) ? (o.language as ModelLanguage) : undefined;
-    const scope: Scope | undefined = o.scope === "on_topic" || o.scope === "off_topic" ? o.scope : undefined;
+    // A structured answer without a valid scope fails closed: off_topic (the user gets the friendly fixed reply).
+    const scope: Scope = o.scope === "on_topic" || o.scope === "off_topic" ? o.scope : "off_topic";
     return { verdict, language, scope };
   } catch {
     return { verdict: "UNSAFE", language: undefined, scope: undefined };

@@ -127,7 +127,7 @@ export function createSkycodeinLlm(opts: SkycodeinOptions): LlmClient {
         max_tokens: 64,
         temperature: 0,
         // Live finding: as plain text the API's own persona answers the user instead of the filter prompt.
-        // A JSON schema forces {"verdict":"SAFE"|"UNSAFE"} every time. The language is optional on purpose:
+        // A JSON schema forces {"verdict":"SAFE"|"UNSAFE"} every time. The language is optional on purpose (the scope is required, a missing one is treated as off topic):
         // a missing or odd language must never turn a SAFE verdict into an error.
         response_format: {
           type: "json_schema",
@@ -140,7 +140,7 @@ export function createSkycodeinLlm(opts: SkycodeinOptions): LlmClient {
                 language: { type: "string", enum: [...CLASSIFIER_LANGUAGES] },
                 scope: { type: "string", enum: ["on_topic", "off_topic"] },
               },
-              required: ["verdict"],
+              required: ["verdict", "scope"],
               additionalProperties: false,
             },
           },

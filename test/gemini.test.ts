@@ -164,7 +164,7 @@ test("gemini classifyWithLanguage: schema carries the language, answer is parsed
   for (const [raw, wantV, wantL] of [['{"verdict":"SAFE","language":"it"}', "SAFE", "it"], ['{"verdict":"SAFE","language":"xx"}', "SAFE", undefined], ["nonsense", "UNSAFE", undefined]] as const) {
     const { client, calls } = fakeClient({ text: raw });
     const r = await make(client).classifyWithLanguage!("hi");
-    assert.deepEqual(r, { verdict: wantV, language: wantL, scope: undefined }, raw);
+    assert.deepEqual(r, { verdict: wantV, language: wantL, scope: raw.startsWith("{") ? "off_topic" : undefined }, raw);
     const props = (calls[0]!.config?.responseSchema as { properties: Record<string, { enum?: string[] }> }).properties;
     assert.deepEqual(props.language!.enum, ["en", "es", "fr", "pt", "de", "it", "other"]);
   }
@@ -177,5 +177,6 @@ test("gemini classifyWithLanguage: schema carries the scope and the system text 
   assert.equal(r.scope, "off_topic");
   const props = (calls[0]!.config?.responseSchema as { properties: Record<string, { enum?: string[] }> }).properties;
   assert.deepEqual(props.scope!.enum, ["on_topic", "off_topic"]);
+  assert.deepEqual((calls[0]!.config?.responseSchema as { required: string[] }).required, ["verdict", "scope"]);
   assert.match(String(calls[0]!.config?.systemInstruction), /OpBritops/);
 });
