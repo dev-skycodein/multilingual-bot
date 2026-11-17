@@ -60,19 +60,21 @@ export class DailyCap {
 
 /**
  * Caps requests per client per UTC day. It stops one client from using up the global DailyCap for
- * everybody. If more than MAX_KEYS different clients show up in one day, new clients are refused
- * (the table must stay bounded).
+ * everybody. The table must stay bounded: when it is full the OLDEST client is forgotten to make room (that client gets
+ * a fresh budget; the global DailyCap still bounds the spend). It used to refuse every new client instead, which let
+ * anyone with enough addresses lock everybody else out for the rest of the day.
  */
 export class KeyedDailyCap {
-  private static readonly MAX_KEYS = 50_000;
   private day = "";
   private counts = new Map<string, number>();
   private readonly cap: number;
   private readonly now: () => number;
+  private readonly maxKeys: number;
 
-  constructor(cap: number, now: () => number = Date.now) {
+  constructor(cap: number, now: () => number = Date.now, maxKeys = 50_000) {
     this.cap = cap;
     this.now = now;
+    this.maxKeys = maxKeys;
   }
 
   allow(key: string): boolean {
@@ -82,7 +84,10 @@ export class KeyedDailyCap {
       this.counts.clear();
     }
     const n = this.counts.get(key);
-    if (n === undefined && this.counts.size >= KeyedDailyCap.MAX_KEYS) return false;
+    if (n === undefined && this.counts.size >= this.maxKeys) {
+      const oldest = this.counts.keys().next().value;
+      if (oldest !== undefined) this.counts.delete(oldest);
+    }
     if ((n ?? 0) >= this.cap) return false;
     this.counts.set(key, (n ?? 0) + 1);
     return true;

@@ -9,6 +9,7 @@ import { createLlm, keyVariable } from "./llm-factory.ts";
 import { SessionStore } from "./sessions.ts";
 import { createOutputGuard } from "./guards/output.ts";
 import { SlidingWindowLimiter, DailyCap, KeyedDailyCap } from "./guards/ratelimit.ts";
+import { normalizeIp, isPrivateAddress } from "./guards/ip.ts";
 import { handleChat, messages } from "./chat.ts";
 import type { ChatDeps } from "./chat.ts";
 
@@ -41,11 +42,22 @@ export function clientIp(
   req: { headers: Record<string, string | string[] | undefined>; socket: { remoteAddress?: string | undefined } },
   hops: number,
 ): string {
-  const socketAddr = req.socket.remoteAddress ?? "unknown";
+  const socketAddr = req.socket.remoteAddress ? normalizeIp(req.socket.remoteAddress) : "unknown";
   if (hops <= 0) return socketAddr;
   const raw = req.headers["x-forwarded-for"];
   const parts = (Array.isArray(raw) ? raw.join(",") : (raw ?? "")).split(",").map((p) => p.trim()).filter(Boolean);
-  return parts.length >= hops ? parts[parts.length - hops]! : socketAddr;
+  return parts.length >= hops ? normalizeIp(parts[parts.length - hops]!) : socketAddr;
+}
+
+/**
+ * True when X-Forwarded-For arrives from a private or loopback address while TRUST_PROXY_HOPS is 0: almost certainly a
+ * reverse proxy on our side that we are not told about, so every visitor would share ONE rate-limit key.
+ */
+export function proxySuspected(
+  req: { headers: Record<string, string | string[] | undefined>; socket: { remoteAddress?: string | undefined } },
+  hops: number,
+): boolean {
+  return hops <= 0 && req.headers["x-forwarded-for"] !== undefined && !!req.socket.remoteAddress && isPrivateAddress(req.socket.remoteAddress);
 }
 
 /** Host header without the port, lower case: "Localhost:3000" -> "localhost", "[::1]:3000" -> "[::1]". */
@@ -91,6 +103,7 @@ function readBody(req: http.IncomingMessage): Promise<string | null> {
 }
 
 export function createAppServer(deps: ChatDeps, publicDir: string): http.Server {
+  let proxyWarned = false;
   // Only these files are ever served: no path from the request is used to read disk.
   const statics: Record<string, { type: string; body: string }> = {
     "/": { type: "text/html; charset=utf-8", body: readFileSync(path.join(publicDir, "index.html"), "utf8") },
@@ -141,6 +154,10 @@ export function createAppServer(deps: ChatDeps, publicDir: string): http.Server 
         // "history", "role", "system"...) is ignored.
         const { sessionId, message } = parsed as { sessionId?: unknown; message?: unknown };
 
+        if (!proxyWarned && proxySuspected(req, deps.config.trustProxyHops)) {
+          proxyWarned = true;
+          deps.log("proxy_suspected", { hint: "X-Forwarded-For from a private address but TRUST_PROXY_HOPS=0: all clients share one rate limit key. Set TRUST_PROXY_HOPS to the number of proxies." });
+        }
         const out = await handleChat(deps, {
           sessionId,
           message,
