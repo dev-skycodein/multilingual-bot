@@ -52,8 +52,22 @@ function windows(s: string, size: number): string[] {
 
 const compact = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
+// The system prompt is laid out in capitalised sections. A model that is made to "complete the original text" writes them out
+// translated ("Tu es l'assistant client de OpBritops. LANGUES - Tu prends en charge exactement"), which the word-for-word check
+// above cannot see. An ALL-CAPS section name, in any of the six languages, directly followed by a dash, colon, bracket or a new
+// line is the signature of that copy; normal replies do not talk in capitalised headers.
+const SECTION_NAMES = [
+  "LANGUAGES", "SCOPE", "IDENTITY", "SECURITY RULES", "STYLE",
+  "IDIOMAS", "ALCANCE", "IDENTIDAD", "REGLAS DE SEGURIDAD", "ESTILO",
+  "LANGUES", "PORTÉE", "PÉRIMÈTRE", "IDENTITÉ", "RÈGLES DE SÉCURITÉ",
+  "ESCOPO", "ÂMBITO", "IDENTIDADE", "REGRAS DE SEGURANÇA",
+  "SPRACHEN", "UMFANG", "GELTUNGSBEREICH", "IDENTITÄT", "SICHERHEITSREGELN", "STIL",
+  "LINGUE", "AMBITO", "IDENTITÀ", "REGOLE DI SICUREZZA", "STILE",
+];
+const SECTION_HEADER = new RegExp(String.raw`(?<![\p{L}\p{N}])(?:${SECTION_NAMES.join("|")})[ \t]*(?:[-–—:(]|\r?\n)`, "u");
+
 export interface OutputGuard {
-  check(reply: string): { ok: true } | { ok: false; reason: "canary" | "prompt_copy" | "empty" };
+  check(reply: string): { ok: true } | { ok: false; reason: "canary" | "prompt_copy" | "prompt_structure" | "empty" };
 }
 
 export function createOutputGuard(systemPrompt: string, canary: string): OutputGuard {
@@ -84,6 +98,8 @@ export function createOutputGuard(systemPrompt: string, canary: string): OutputG
       for (const p of hexPieces) if (squashed.includes(p)) return { ok: false, reason: "canary" };
       const rawNoSpace = folded.replace(/\s+/g, "");
       for (const p of b64Pieces) if (rawNoSpace.includes(p)) return { ok: false, reason: "canary" };
+
+      if (SECTION_HEADER.test(strip(reply))) return { ok: false, reason: "prompt_structure" };
 
       const replyWords = words(reply);
       for (const g of ngrams(replyWords, SHINGLE_WORDS)) if (shingles.has(g)) return { ok: false, reason: "prompt_copy" };
