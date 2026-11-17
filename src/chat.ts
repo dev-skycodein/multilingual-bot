@@ -7,8 +7,8 @@ import { normalizeInput } from "./guards/input.ts";
 import { detectLanguage, candidateLanguages, SUPPORTED_LANGS } from "./guards/language.ts";
 import { languageListProblem } from "./guards/langlist.ts";
 import type { Detected, Lang } from "./guards/language.ts";
-import { resolveLanguage } from "./guards/langlock.ts";
-import { languageHint, retryNote } from "./prompt.ts";
+import { resolveLanguage, wordCount } from "./guards/langlock.ts";
+import { languageHint, retryNote, shortMessageNote } from "./prompt.ts";
 
 export interface ChatDeps {
   config: Config;
@@ -203,13 +203,22 @@ export async function handleChat(
   // 4b. Scope gate. The main model does not reliably refuse essays or general-knowledge questions, so the classifier's
   //     scope decides: off-topic gets a fixed, friendly reply in the user's language and the model is never called.
   //     A missing scope (or a provider that does not report one) lets the message through to the model as before.
+  //     Exception: a ONE-word message in a running conversation ("ok", "Hotel", "Team") is almost always an
+  //     acknowledgement, and the classifier gets these wrong. The model then answers with a note that it must still
+  //     decline anything outside the product. This never touches the attack verdict above.
+  let shortNote = "";
   if (scope === "off_topic") {
-    deps.log("off_topic");
-    return { status: 200, body: { sessionId, reply: messageFor(product, "offtopic", shown), blocked: true } };
+    if (earlier.length > 0 && wordCount(input.text) <= 1) {
+      deps.log("off_topic_short_ignored");
+      shortNote = shortMessageNote();
+    } else {
+      deps.log("off_topic");
+      return { status: 200, body: { sessionId, reply: messageFor(product, "offtopic", shown), blocked: true } };
+    }
   }
 
   // 5. Main model, with server-held history plus this message and a server-made language hint.
-  const system = deps.systemPrompt + languageHint(lang, sticky, resolved.source);
+  const system = deps.systemPrompt + languageHint(lang, sticky, resolved.source) + shortNote;
   const turns = [...deps.sessions.history(sessionId), { role: "user" as const, content: input.text }];
   let result;
   try {

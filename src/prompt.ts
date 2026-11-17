@@ -78,3 +78,11 @@ export function retryNote(langs: Lang[]): string {
   const target = names.length === 1 ? names[0] : `the language the user's message is written in, one of: ${names.join(", ")}`;
   return `\n\nIMPORTANT: your previous reply was written in the wrong language. Write the answer again, entirely in ${target}.`;
 }
+
+/**
+ * Added when the classifier said "off topic" about a one-word message in a running conversation and the server set that
+ * verdict aside (a single word is almost always an acknowledgement). The model must still refuse real off-topic requests.
+ */
+export function shortMessageNote(): string {
+  return "\n\nNote (set by the server): the latest message is a single word in the middle of a conversation. If it is only an acknowledgement or a short reply, answer briefly and offer help with the product. If it asks for anything outside the product, decline politely.";
+}
