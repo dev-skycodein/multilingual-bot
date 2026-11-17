@@ -291,7 +291,7 @@ export async function handleChat(
 
   // 8. A list of languages must be exactly the six. A wrong one is replaced by the fixed list (not by another model call).
   let text = result.text;
-  if (languageListProblem(text)) {
+  if (languageListProblem(text, input.text)) {
     deps.log("language_list_fixed");
     const inReply = detectLanguage(text);
     const listLang: Lang = SUPPORTED_LANGS.includes(lang as Lang)

@@ -3,8 +3,9 @@
 // Why: live, "Quali lingue parli?" was answered "Parlo italiano, inglese, francese, portoghese, tedesco e
 // italiano." (Spanish missing, Italian twice). A prompt rule did not stop that, so the server checks it.
 //
-// A reply counts as a language list when it names at least four of the six (in any of the six languages).
-// Then it must name all six, and none twice. Replies that mention one to three languages are left alone.
+// A reply counts as a language list when it names at least four of the six (in any of the six languages) and the user
+// asked about languages, or at least five whatever was asked. Then it must name all six, and none twice. Replies that
+// mention fewer names are left alone.
 import type { Lang } from "./language.ts";
 
 // How each language is written in the six languages, without accents too (people and models drop them).
@@ -20,13 +21,28 @@ const NAME_FORMS: Record<Lang, string[]> = {
 const LOOKUP = new Map<string, Lang>();
 for (const [lang, forms] of Object.entries(NAME_FORMS) as [Lang, string[]][]) for (const f of forms) LOOKUP.set(f, lang);
 
-/** True when the reply is a list of languages that is not exactly the six supported ones, each once. */
-export function languageListProblem(reply: string): boolean {
+// Words that mean the user is asking about languages (in the six languages, with and without accents).
+const LANGUAGE_QUESTION = /(?<![\p{L}])(?:languages?|speak|idiomas?|habl\w*|langues?|parl\w*|lingua|lingue|falas?|fala\w*|sprachen?|sprech\w*)(?![\p{L}])/iu;
+
+/** True when the user's message asks about languages (which ones the assistant speaks or supports). */
+export function asksAboutLanguages(userMessage: string): boolean {
+  return LANGUAGE_QUESTION.test(userMessage);
+}
+
+/**
+ * True when the reply is a list of languages that is not exactly the six supported ones, each once.
+ * A reply naming FOUR OR FIVE languages is only judged when the user asked about languages: otherwise it is probably an
+ * ordinary sentence ("you can switch between English, Spanish, French and German") and replacing the whole reply with the
+ * fixed list would throw away what the user actually asked. Five or more names is always judged (that is the live
+ * failure: five of the six, one repeated or one missing).
+ */
+export function languageListProblem(reply: string, userMessage = ""): boolean {
   const counts = new Map<Lang, number>();
   for (const word of reply.toLowerCase().split(/[^\p{L}]+/u)) {
     const lang = LOOKUP.get(word);
     if (lang) counts.set(lang, (counts.get(lang) ?? 0) + 1);
   }
-  if (counts.size < 4) return false;
+  const threshold = userMessage === "" || asksAboutLanguages(userMessage) ? 4 : 5;
+  if (counts.size < threshold) return false;
   return counts.size < 6 || [...counts.values()].some((n) => n > 1);
 }

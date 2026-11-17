@@ -67,3 +67,38 @@ test("fixed language list exists in all six languages and each is a correct list
 test("short everyday English replies are recognised as English", () => {
   for (const t of ["Pleasure! 😊", "You're welcome!", "Glad to help!", "Sorry about that."]) assert.equal(detectLanguage(t), "en", t);
 });
+
+// Audit 2026-11-17 (low): "you can switch between English, Spanish, French and German" got the WHOLE reply replaced by the fixed list.
+test("language list: four names are judged only when the user asked about languages; five or more always", () => {
+  const four = "You can switch between English, Spanish, French and German whenever you like.";
+  assert.equal(languageListProblem(four, "How do I change how you answer me?"), false);
+  assert.equal(languageListProblem(four, "Which languages do you speak?"), true);
+  assert.equal(languageListProblem(four), true, "no user message given: the strict check, as before");
+  const five = "Parlo italiano, inglese, francese, portoghese e tedesco.";
+  assert.equal(languageListProblem(five, "Come funziona?"), true);
+  assert.equal(languageListProblem("Parlo italiano, inglese, francese, portoghese, tedesco e italiano.", "Come funziona?"), true);
+  assert.equal(languageListProblem("I support English, Spanish, French, Portuguese, German and Italian.", "Which languages do you speak?"), false);
+});
+
+test("language question: recognised in the six languages, not in ordinary support talk", async () => {
+  const { asksAboutLanguages } = await import("../src/guards/langlist.ts");
+  for (const q of ["Which languages do you speak?", "¿Qué idiomas hablas?", "Quelles langues parlez-vous ?", "Quais idiomas você fala?", "Welche Sprachen sprichst du?", "Quali lingue parli?"]) assert.ok(asksAboutLanguages(q), q);
+  for (const q of ["I need customer support with my account", "How much does it cost?", "Hello"]) assert.ok(!asksAboutLanguages(q), q);
+});
+
+test("chat: a sentence naming four languages is kept when the user did not ask about languages, replaced when they did", async () => {
+  const text = "You can switch between English, Spanish, French and German whenever you like.";
+  const run = async (message: string) => {
+    const llm = fakeLlm();
+    llm.next = { kind: "text", text };
+    const { deps, logs } = makeDeps(llm);
+    const r = await handleChat(deps, { sessionId: undefined, message, clientKey: "t" });
+    return { reply: r.body.reply, fixed: logs.includes("language_list_fixed") };
+  };
+  const unasked = await run("How do I change how you answer me?");
+  assert.equal(unasked.reply, text);
+  assert.equal(unasked.fixed, false);
+  const asked = await run("Which languages do you speak, please?");
+  assert.equal(asked.fixed, true);
+  assert.match(asked.reply, /Portuguese/);
+});
