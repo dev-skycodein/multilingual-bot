@@ -139,7 +139,8 @@ test("config: Gemini is the default provider, with its own default models", () =
 });
 
 test("config: provider, model overrides and thinking level are validated", () => {
-  assert.equal(loadConfig({ LLM_PROVIDER: "anthropic" }).model, "claude-sonnet-5-5");
+  // Anthropic is not a provider of this project (decision 2026-11-18): only Gemini and SkyCodein.
+  assert.throws(() => loadConfig({ LLM_PROVIDER: "anthropic" }), /Invalid LLM_PROVIDER/);
   assert.equal(loadConfig({ MODEL: "my-model" }).model, "my-model");
   assert.equal(loadConfig({ THINKING_LEVEL: "LOW" }).thinkingLevel, "low");
   assert.throws(() => loadConfig({ LLM_PROVIDER: "openai" }), /Invalid LLM_PROVIDER/);

@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { Turn } from "./sessions.ts";
 import type { Lang } from "./guards/language.ts";
 
@@ -129,42 +128,4 @@ export function parseClassification(raw: string | undefined): Classification {
 /** Thrown when the model answers but there is no usable text (for example the token budget ran out). */
 export class EmptyReplyError extends Error {
   override name = "EmptyReplyError";
-}
-
-export function createAnthropicLlm(opts: {
-  model: string;
-  classifierModel: string;
-  maxOutputTokens: number;
-}): LlmClient {
-  const client = new Anthropic({ timeout: 30_000, maxRetries: 2 });
-
-  return {
-    async classify(text, context) {
-      const res = await client.messages.create({
-        model: opts.classifierModel,
-        max_tokens: 1024,
-        system: CLASSIFIER_SYSTEM,
-        thinking: { type: "disabled" },
-        output_config: { effort: "low" },
-        messages: [{ role: "user", content: wrapForClassifier(text, context) }],
-      });
-      return parseVerdict(res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join(""));
-    },
-
-    async reply(system, history) {
-      const res = await client.messages.create({
-        model: opts.model,
-        max_tokens: opts.maxOutputTokens,
-        system,
-        output_config: { effort: "low" },
-        messages: history.map((t) => ({ role: t.role, content: t.content })),
-      });
-      if (res.stop_reason === "refusal") return { kind: "refusal" };
-      const text = res.content
-        .flatMap((b) => (b.type === "text" ? [b.text] : []))
-        .join("")
-        .trim();
-      return { kind: "text", text };
-    },
-  };
 }

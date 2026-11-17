@@ -1,4 +1,4 @@
-export type Provider = "gemini" | "anthropic" | "skycodein";
+export type Provider = "gemini" | "skycodein";
 export type ThinkingLevelName = "minimal" | "low" | "medium" | "high";
 
 export interface Config {
@@ -27,13 +27,11 @@ export interface Config {
   maxSessions: number;
 }
 
-// Model IDs come from Google's and Anthropic's published model lists. They have
-// not been called live from this project yet: run `npm run smoke` to check them.
+// Providers: Gemini, and SkyCodein when the Gemini quota is used up. Run `npm run smoke` to check a model name.
 const DEFAULT_MODELS: Record<Provider, { model: string; classifierModel: string }> = {
   // gemini-3.6-flash and gemini-3.8-flash answered 503/504 (overload) in the first live
   // tests, while gemini-3.5-flash-lite worked, so the lite model is the default for both roles.
   gemini: { model: "gemini-3.5-flash-lite", classifierModel: "gemini-3.5-flash-lite" },
-  anthropic: { model: "claude-sonnet-5-5", classifierModel: "claude-haiku-5-5" },
   // Not the auto-router "skycodein": it picks the coding assistant from the message text, which an attacker could steer.
   skycodein: { model: "skycodein-general", classifierModel: "skycodein-general" },
 };
@@ -92,7 +90,7 @@ function skycodeinBaseUrl(env: NodeJS.ProcessEnv, provider: Provider): string {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const provider = oneOf(env, "LLM_PROVIDER", ["gemini", "anthropic", "skycodein"] as const) ?? "gemini";
+  const provider = oneOf(env, "LLM_PROVIDER", ["gemini", "skycodein"] as const) ?? "gemini";
   const defaults = DEFAULT_MODELS[provider];
   const host = env.HOST || "127.0.0.1";
   return {
