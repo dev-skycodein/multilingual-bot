@@ -57,6 +57,7 @@ export function createGeminiLlm(opts: GeminiOptions): LlmClient {
             properties: {
               verdict: { type: Type.STRING, enum: ["SAFE", "UNSAFE"] },
               language: { type: Type.STRING, enum: [...CLASSIFIER_LANGUAGES] },
+              subject: { type: Type.STRING },
               scope: { type: Type.STRING, enum: ["on_topic", "off_topic"] },
             },
             required: ["verdict", "scope"],

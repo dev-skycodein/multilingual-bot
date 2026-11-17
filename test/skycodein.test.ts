@@ -110,7 +110,7 @@ test("skycodein classify: wrapped message, filter prompt as system, small token 
     assert.equal(v, want, JSON.stringify(raw));
     const b = calls[0]!.body;
     assert.equal(b.model, "cls-model");
-    assert.ok(b.max_tokens <= 64);
+    assert.ok(b.max_tokens <= 128);
     assert.equal(b.messages[0].role, "system");
     assert.match(b.messages[0].content, /security filter/);
     assert.match(b.messages[1].content, /<history>[\s\S]*earlier one[\s\S]*<\/history>\s*<message>/);

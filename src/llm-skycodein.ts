@@ -124,7 +124,7 @@ export function createSkycodeinLlm(opts: SkycodeinOptions): LlmClient {
     async classifyWithLanguage(text, context): Promise<Classification> {
       const { text: out } = await call({
         model: opts.classifierModel,
-        max_tokens: 64,
+        max_tokens: 128,
         temperature: 0,
         // Live finding: as plain text the API's own persona answers the user instead of the filter prompt.
         // A JSON schema forces {"verdict":"SAFE"|"UNSAFE"} every time. The language is optional on purpose (the scope is required, a missing one is treated as off topic):
@@ -138,6 +138,8 @@ export function createSkycodeinLlm(opts: SkycodeinOptions): LlmClient {
               properties: {
                 verdict: { type: "string", enum: ["SAFE", "UNSAFE"] },
                 language: { type: "string", enum: [...CLASSIFIER_LANGUAGES] },
+                // Written before the scope on purpose: the answer comes out in this order, so the scope follows from it.
+                subject: { type: "string" },
                 scope: { type: "string", enum: ["on_topic", "off_topic"] },
               },
               required: ["verdict", "scope"],
