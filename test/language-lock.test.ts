@@ -219,7 +219,26 @@ test("chat: a reply in a script outside the six (Urdu to an Urdu message) is cau
   const r = await send(deps, "آپ کیا کر سکتے ہیں؟");
   assert.ok(logs.includes("language_retry"));
   assert.ok(logs.includes("language_mismatch"));
-  assert.equal(r.body.reply, messageFor("OpBritops", "retry", "en"));
+  // A user of an unsupported language gets the rule's answer: English, and the six languages we do support.
+  assert.equal(r.body.reply, messageFor("OpBritops", "languages", "en"));
+});
+
+// Live finding (SkyCodein, full red-team 2026-11-18): Arabic and Chinese greetings ended in "Sorry, I couldn't answer that properly" and a
+// Hindi greeting in the six-line "I can't follow that request": the rule is "reply in English and say which six languages are supported".
+test("unsupported language: a refusal from the model (first or after the retry) also gets the English list of the six languages", async () => {
+  const hindi = "नमस्ते, आप क्या कर सकते हैं?";
+  const first = fakeLlm();
+  first.next = { kind: "refusal" };
+  assert.equal((await send(makeDeps(first).deps, hindi)).body.reply, messageFor("OpBritops", "languages", "en"));
+  const retry = fakeLlm();
+  retry.queue = [{ kind: "text", text: "नमस्ते! मैं आपकी मदद कर सकता हूँ, आप क्या जानना चाहते हैं" }, { kind: "refusal" }];
+  assert.equal((await send(makeDeps(retry).deps, hindi)).body.reply, messageFor("OpBritops", "languages", "en"));
+});
+
+test("supported languages are unaffected: a refusal or a failed retry still uses that language's own fixed text", async () => {
+  const it = fakeLlm();
+  it.next = { kind: "refusal" };
+  assert.equal((await send(makeDeps(it).deps, "Ciao, cosa puoi fare per me?")).body.reply, messageFor("OpBritops", "declined", "it"));
 });
 
 test("chat: an Urdu-script message gets an English reply when the retry fixes the language", async () => {

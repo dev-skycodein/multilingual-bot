@@ -237,9 +237,11 @@ export async function handleChat(
     deps.log("model_error", errInfo(e));
     return { status: 503, body: { sessionId, reply: messageFor(product, "unavailable", shown), blocked: true } };
   }
+  // A user of a language outside the six gets the rule's answer in every failure case: English, and the six languages we support.
+  const failText = (kind: Kind): string => (lang === "other" ? messageFor(product, "languages", "en") : messageFor(product, kind, shown));
   if (result.kind === "refusal") {
     deps.log("model_refusal");
-    return { status: 200, body: { sessionId, reply: messageFor(product, "declined", shown), blocked: true } };
+    return { status: 200, body: { sessionId, reply: failText("declined"), blocked: true } };
   }
 
   // 6. Output guard.
@@ -263,7 +265,7 @@ export async function handleChat(
     }
     if (result.kind === "refusal") {
       deps.log("model_refusal");
-      return { status: 200, body: { sessionId, reply: messageFor(product, "declined", shown), blocked: true } };
+      return { status: 200, body: { sessionId, reply: failText("declined"), blocked: true } };
     }
     checked = deps.outputGuard.check(result.text);
     if (!checked.ok) {
@@ -274,7 +276,7 @@ export async function handleChat(
       deps.log("language_mismatch");
       // One certain language: say it in that language. Several candidates: all six, as for any unknown language.
       const fixedLang: Detected = expected.length === 1 ? expected[0]! : "unknown";
-      return { status: 200, body: { sessionId, reply: messageFor(product, "retry", fixedLang), blocked: true } };
+      return { status: 200, body: { sessionId, reply: lang === "other" ? failText("retry") : messageFor(product, "retry", fixedLang), blocked: true } };
     }
   }
 
